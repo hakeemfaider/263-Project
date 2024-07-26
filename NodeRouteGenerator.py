@@ -126,6 +126,7 @@ def possible_node_loop(nodes, pallets, max_pallets, max_time, map_data,
 
 
 map_data = pd.read_csv('WoolworthsDurations.csv')
+print(map_data)
 data = pd.read_csv('WoolworthsDemand2024.csv')
 store_data = pd.read_csv('WoolworthsLocations.csv')
 all_stores = []
@@ -141,25 +142,29 @@ weekdays, weekend = create_data()
 final_data = pd.DataFrame([weekdays, weekend], index=["Weekdays", "Saturday"], columns=all_stores)
 final_data = final_data.transpose()
 
-min_nodes = 2
+min_nodes = 1
 max_time = 619
 used_nodes = []
 max_pallets = 20
 total_possible_paths = []
 
+# This code picks a node a truck could drive to to start, and then searches for nodes around it
 for stores in all_stores:
     total_node_counter = 1
+    # Set up the 'route' aka the set of connected nodes
     current_route = ["Distribution Centre Auckland", stores]
+    # Set up how many pallets are required at that first store
     current_pallets = final_data['Weekdays'][stores]
     starting_node = stores
+    # Search for nodes that satisfy the time criteria around our current node
     possible_nodes = search_nodes(starting_node, map_data, max_time)
+    # Repeat the same loop of searching for nodes and going to them, until we reach a dead end, then add that route
+    # to the possible paths
     possible_node_loop(possible_nodes, current_pallets, max_pallets, max_time, map_data,
                                         total_node_counter, min_nodes, final_data)
 
 
-if min_nodes == 1:
-    for store in all_stores[0:-1]:
-        total_possible_paths.append(['Distribution Centre Auckland', store])
+
 
 for i in range(len(total_possible_paths)):
     total_possible_paths[i].append('Distribution Centre Auckland')
