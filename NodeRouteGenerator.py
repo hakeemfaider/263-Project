@@ -39,7 +39,6 @@ def create_data():
     weekdays_list_demand.append(0)
     saturdays_list_demand = saturdays["Upper Quartile Saturday Demand"].to_list()
     saturdays_list_demand.append(0)
-    print(saturdays_list_demand)
 
     return weekdays_list_demand, saturdays_list_demand
 def search_nodes(starting_node, map_data, max_time, pallet_data, day):
@@ -49,8 +48,6 @@ def search_nodes(starting_node, map_data, max_time, pallet_data, day):
         if map_data.iloc[index].iloc[i + 1] <= max_time and map_data.iloc[index].iloc[i + 1] != 0:
             if map_data.iloc[i].iloc[0] != "Distribution Centre Auckland" and map_data.iloc[i].iloc[0] != starting_node:
                 if pallet_data[day][map_data.iloc[i].iloc[0]] != 0:
-                    print(map_data.iloc[i].iloc[0])
-                    print(pallet_data[day][map_data.iloc[i].iloc[0]])
                     possible_nodes.append(map_data.iloc[i].iloc[0])
     return possible_nodes
 
@@ -111,8 +108,26 @@ def possible_node_loop(nodes, pallets, max_pallets, max_time, map_data,
                 total_possible_paths.append(current_route.copy())
 
 
+
+def calc_times():
+    global total_possible_paths
+    global all_stores
+    global map_data
+    path_times = {}
+    for i in range(len(total_possible_paths)):
+        current_path_time_sum = 0
+        for j in range(len(total_possible_paths[i]) - 1):
+            index_one = all_stores.index(total_possible_paths[i][j])
+            index_two = all_stores.index(total_possible_paths[i][j + 1]) + 1
+            time_taken = map_data.iloc[index_one].iloc[index_two]
+            current_path_time_sum += time_taken
+        path_times.update({("Route " + str(i)):current_path_time_sum})
+    return path_times
+
+
+
+
 map_data = pd.read_csv('WoolworthsDurations.csv')
-print(map_data)
 data = pd.read_csv('WoolworthsDemand2024.csv')
 store_data = pd.read_csv('WoolworthsLocations.csv')
 all_stores = []
@@ -131,7 +146,7 @@ final_data = final_data.transpose()
 # Min nodes : the amount of shops, other than Distribution centre a truck MUST visit before returning
 # Max_time : the max time a truck is allowed to take between those shops
 
-min_nodes = 2
+min_nodes = 1
 max_time = 619
 used_nodes = []
 max_pallets = 20
@@ -159,12 +174,14 @@ for stores in all_stores:
         possible_node_loop(possible_nodes, current_pallets, max_pallets, max_time, map_data,
                                             total_node_counter, min_nodes, final_data, day_type)
 
-# Add distribution centre on to the end of each route to complete the route
-for i in range(len(total_possible_paths)):
-    total_possible_paths[i].append('Distribution Centre Auckland')
+
 
 # Function deletes the paths we deem too short as per our node requirements
 delete_short(min_nodes)
+
+# Add distribution centre on to the end of each route to complete the route
+for i in range(len(total_possible_paths)):
+    total_possible_paths[i].append('Distribution Centre Auckland')
 
 # Show our possible paths
 for i in range(len(total_possible_paths)):
@@ -187,3 +204,6 @@ if len(see_all_companies) != len(all_viable_stores) + 1:
     print("were/was missed out")
 else:
     print("All nodes can be visited in some way from these routes. Additional routes may be needed if routes overlap.")
+
+path_calc = calc_times()
+print(path_calc)
