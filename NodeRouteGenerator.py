@@ -1,6 +1,8 @@
 import pandas as pd
 import numpy as np
-from random import *
+from math import ceil
+from pulp import *
+
 
 def create_data():
     df = pd.read_csv('WoolworthsDemand2024.csv')
@@ -108,7 +110,6 @@ def possible_node_loop(nodes, pallets, max_pallets, max_time, map_data,
                 total_possible_paths.append(current_route.copy())
 
 
-
 def calc_times():
     global total_possible_paths
     global all_stores
@@ -121,7 +122,12 @@ def calc_times():
             index_two = all_stores.index(total_possible_paths[i][j + 1]) + 1
             time_taken = map_data.iloc[index_one].iloc[index_two]
             current_path_time_sum += time_taken
-        path_times.update({("Route " + str(i)):current_path_time_sum})
+        current_path_time_sum += 10 * 60 * (len(total_possible_paths[i]) - 2)
+        # All times are in hours and cost even if you need 5 mins into next hour, given in seconds currently
+        current_path_time_sum = ceil(current_path_time_sum/3600)
+        route_name = str(i)
+        path_times.update({route_name: current_path_time_sum})
+
     return path_times
 
 
@@ -135,10 +141,7 @@ for i in range(len(data)):
     all_stores.append(data.iloc[i].iloc[0])
 all_stores.append('Distribution Centre Auckland')
 
-test_data1 = pd.DataFrame([5] * 64 + [0], index=all_stores, columns=["Weekdays"])
-test_data2 = pd.DataFrame([3] * 64 + [0], index=all_stores,columns=["Saturday"])
-test_data = pd.concat([test_data1, test_data2], axis=1)
-
+# Create the Upper Quartile Data for each store as decided
 weekdays, weekend = create_data()
 final_data = pd.DataFrame([weekdays, weekend], index=["Weekdays", "Saturday"], columns=all_stores)
 final_data = final_data.transpose()
@@ -147,7 +150,7 @@ final_data = final_data.transpose()
 # Max_time : the max time a truck is allowed to take between those shops
 
 min_nodes = 1
-max_time = 619
+max_time = 800
 used_nodes = []
 max_pallets = 20
 total_possible_paths = []
@@ -184,8 +187,9 @@ for i in range(len(total_possible_paths)):
     total_possible_paths[i].append('Distribution Centre Auckland')
 
 # Show our possible paths
+"""
 for i in range(len(total_possible_paths)):
-    print(total_possible_paths[i])
+    print(total_possible_paths[i])"""
 
 # Create a list with all the nodes that we can possibly visit using our routes
 see_all_companies = []
@@ -205,5 +209,97 @@ if len(see_all_companies) != len(all_viable_stores) + 1:
 else:
     print("All nodes can be visited in some way from these routes. Additional routes may be needed if routes overlap.")
 
-path_calc = calc_times()
-print(path_calc)
+# --------------------------------------------------------------------------------------------------
+
+# Start LP Solving
+
+# Cost = 250 * Each truck hours + 325 * any extra hour per truck that goes over + 2300 * Mainfreight 4 hour time
+
+# TODO: Calculate time each truck is on route, 24 Trucks, 20 Pallets held
+# TODO: Constraints : Each truck can do 4 hours twice a day, each route has to be less than 4 hours otherwise cost
+
+""" Notes : If number of routes > 48, we must use Mainfreight trucks
+            If any route > 4 hours, + 325 * hours extra.
+            Each location can only be visited once. """
+
+# Function creates a dictionary from the routes calculated with the respective route and time the truck would take
+route_times = calc_times()
+under_times = route_times.copy()
+under_price = 250
+over_times = route_times.copy()
+over_price = 325
+for keys in route_times.keys():
+    if route_times[keys] <= 4:
+        over_times[keys] = 0
+    else:
+        over_times[keys] -= 4
+        under_times[keys] = 4
+
+nodes = {}
+# Will use for visiting each node exactly once. Remove the first and last items means that it just has shops
+for i in range(len(total_possible_paths)):
+    total_possible_paths[i] = total_possible_paths[i][1:-1]
+    nodes.update({list(route_times.keys())[i]: total_possible_paths[i]})
+
+
+overlapping = {}
+for i in all_viable_stores[0:-1]:
+    temp_array = []
+    for j in list(nodes.keys()):
+        if i in nodes[j]:
+            temp_array.append(j)
+    overlapping.update({i: temp_array})
+
+
+prob = LpProblem("RoutePlanning", LpMinimize)
+
+route_vars = LpVariable.dicts("Route", list(route_times.keys()), 0, 1, cat=LpBinary)
+
+
+prob += (lpSum([route_vars[i] * (under_times[i] * under_price + over_times[i] * over_price) for i in route_vars])
+         , "Objective Loss Function")
+
+const = 1
+# Must visit each node exactly once
+for i in overlapping:
+    prob += lpSum([route_vars[j] for j in overlapping[i]]) == 1
+
+
+
+
+prob.writeLP('Routes.lp')
+prob.solve()
+
+
+# The status of the solution is printed to the screen
+print("Status:", LpStatus[prob.status])
+
+# The optimised objective function valof Ingredients pue is printed to the screen
+print("Total Cost = $", value(prob.objective))
+
+# Each of the variables is printed with its resolved optimum value
+check_location_array = []
+for v in prob.variables():
+    if v.varValue == 1:
+        print(v.name, "=", v.varValue)
+        index = v.name.strip("Route_")
+        print(nodes[index])
+        for locations in nodes[index]:
+            check_location_array.append(locations)
+
+for locations in check_location_array:
+    if locations not in all_stores:
+        print("This store has not been visited with these conditions: ")
+        print(locations)
+
+
+
+
+
+
+
+
+
+
+
+
