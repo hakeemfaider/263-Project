@@ -1,7 +1,13 @@
+import random
+
 import pandas as pd
 import numpy as np
 from math import ceil
 from pulp import *
+import matplotlib.pyplot as plt
+import matplotlib
+from random import randint
+from datetime import datetime
 
 
 def create_data():
@@ -131,8 +137,6 @@ def calc_times():
     return path_times
 
 
-
-
 map_data = pd.read_csv('WoolworthsDurations.csv')
 data = pd.read_csv('WoolworthsDemand2024.csv')
 store_data = pd.read_csv('WoolworthsLocations.csv')
@@ -150,15 +154,17 @@ final_data = final_data.transpose()
 # Max_time : the max time a truck is allowed to take between those shops
 
 min_nodes = 1
-max_time = 800
+max_time = 1000
 used_nodes = []
 max_pallets = 20
 total_possible_paths = []
+trucks = 24
+shifts = 2
 
 # Change type of day here, Weekdays or Saturday
 
-day_type = 'Weekdays'
-#day_type = 'Saturday'
+#day_type = 'Weekdays'
+day_type = 'Saturday'
 
 # This code picks a node a truck could drive to to start, and then searches for nodes around it. Only go to it if it
 # has demand
@@ -187,9 +193,9 @@ for i in range(len(total_possible_paths)):
     total_possible_paths[i].append('Distribution Centre Auckland')
 
 # Show our possible paths
-"""
-for i in range(len(total_possible_paths)):
-    print(total_possible_paths[i])"""
+
+'''for i in range(len(total_possible_paths)):
+    print(total_possible_paths[i])'''
 
 # Create a list with all the nodes that we can possibly visit using our routes
 see_all_companies = []
@@ -215,25 +221,12 @@ else:
 
 # Cost = 250 * Each truck hours + 325 * any extra hour per truck that goes over + 2300 * Mainfreight 4 hour time
 
-# TODO: Calculate time each truck is on route, 24 Trucks, 20 Pallets held
-# TODO: Constraints : Each truck can do 4 hours twice a day, each route has to be less than 4 hours otherwise cost
-
 """ Notes : If number of routes > 48, we must use Mainfreight trucks
             If any route > 4 hours, + 325 * hours extra.
             Each location can only be visited once. """
 
 # Function creates a dictionary from the routes calculated with the respective route and time the truck would take
 route_times = calc_times()
-under_times = route_times.copy()
-under_price = 250
-over_times = route_times.copy()
-over_price = 325
-for keys in route_times.keys():
-    if route_times[keys] <= 4:
-        over_times[keys] = 0
-    else:
-        over_times[keys] -= 4
-        under_times[keys] = 4
 
 nodes = {}
 # Will use for visiting each node exactly once. Remove the first and last items means that it just has shops
@@ -241,6 +234,36 @@ for i in range(len(total_possible_paths)):
     total_possible_paths[i] = total_possible_paths[i][1:-1]
     nodes.update({list(route_times.keys())[i]: total_possible_paths[i]})
 
+too_long_routes = []
+
+for routes in route_times:
+    if route_times[routes] > 4:
+        too_long_routes.append(routes)
+for i in too_long_routes:
+    route_times.pop(i)
+    nodes.pop(i)
+
+
+'''
+Section can be activated to test randomness in routes due to traffic (its normally distributed? May change)
+
+for routes in route_times:
+    rng = np.random.default_rng()
+    random_dem = rng.normal(0, 0.5)
+    print(random_dem)
+    route_times[routes] += random_dem
+
+'''
+
+under_price = 250
+over_price = 325
+max_hours = 4
+route_times_check = {}
+for i in route_times:
+    if route_times[i] > 4:
+        route_times_check.update({i: 1})
+    else:
+        route_times_check.update({i: 0})
 
 overlapping = {}
 for i in all_viable_stores[0:-1]:
@@ -256,15 +279,15 @@ prob = LpProblem("RoutePlanning", LpMinimize)
 route_vars = LpVariable.dicts("Route", list(route_times.keys()), 0, 1, cat=LpBinary)
 
 
-prob += (lpSum([route_vars[i] * (under_times[i] * under_price + over_times[i] * over_price) for i in route_vars])
+prob += (lpSum([route_vars[i] * ((under_price * (route_times[i] - (route_times[i] - max_hours) * route_times_check[i])
+                                  + over_price * (route_times[i] - max_hours) * route_times_check[i])) for i
+                in route_vars])
          , "Objective Loss Function")
 
-const = 1
+prob += lpSum([route_vars[i] for i in route_vars]) <= trucks * shifts, "Trucks before extra needed"
 # Must visit each node exactly once
 for i in overlapping:
     prob += lpSum([route_vars[j] for j in overlapping[i]]) == 1
-
-
 
 
 prob.writeLP('Routes.lp')
@@ -277,21 +300,44 @@ print("Status:", LpStatus[prob.status])
 # The optimised objective function valof Ingredients pue is printed to the screen
 print("Total Cost = $", value(prob.objective))
 
+route_count = 0
 # Each of the variables is printed with its resolved optimum value
 check_location_array = []
 for v in prob.variables():
     if v.varValue == 1:
+        route_count += 1
+        demand_req = 0
         print(v.name, "=", v.varValue)
         index = v.name.strip("Route_")
-        print(nodes[index])
+        print(f"Hours needed is {route_times[index]}")
+        nodes[index].insert(0, "Distribution Centre Auckland")
+        nodes[index].append("Distribution Centre Auckland")
+        print(f"Route is {nodes[index]}")
+        for i in nodes[index]:
+            demand_req += final_data[day_type][i]
+        print(f"Demand Required was {demand_req} pallets")
+        nodes[index].append("Distribution Centre Auckland")
+        nodes[index].insert(0, "Distribution Centre Auckland")
+        x_values = []
+        y_values = []
+        for visits in nodes[index]:
+            for i in store_data.index:
+                if store_data.loc[i]['Store'] == visits:
+                    x_values.append(store_data.loc[i]['Long'])
+                    y_values.append(store_data.loc[i]['Lat'])
+        plt.plot(x_values, y_values)
+        for j in range(len(x_values)):
+            plt.scatter(x_values[j], y_values[j], color='black')
         for locations in nodes[index]:
             check_location_array.append(locations)
+plt.show()
 
 for locations in check_location_array:
     if locations not in all_stores:
         print("This store has not been visited with these conditions: ")
         print(locations)
 
+print(f"We need {route_count} routes for this solution")
 
 
 
