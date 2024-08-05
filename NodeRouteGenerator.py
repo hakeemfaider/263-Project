@@ -120,6 +120,8 @@ def calc_times():
     global total_possible_paths
     global all_stores
     global map_data
+    global final_data
+    global day_type
     path_times = {}
     for i in range(len(total_possible_paths)):
         current_path_time_sum = 0
@@ -128,7 +130,8 @@ def calc_times():
             index_two = all_stores.index(total_possible_paths[i][j + 1]) + 1
             time_taken = map_data.iloc[index_one].iloc[index_two]
             current_path_time_sum += time_taken
-        current_path_time_sum += 10 * 60 * (len(total_possible_paths[i]) - 2)
+        for store in total_possible_paths[i]:
+            current_path_time_sum += final_data[day_type][store] * 60 * 10
         # All times are in hours and cost even if you need 5 mins into next hour, given in seconds currently
         current_path_time_sum = ceil(current_path_time_sum/3600)
         route_name = str(i)
@@ -154,7 +157,7 @@ final_data = final_data.transpose()
 # Max_time : the max time a truck is allowed to take between those shops
 
 min_nodes = 1
-max_time = 1000
+max_time = 10000
 used_nodes = []
 max_pallets = 20
 total_possible_paths = []
@@ -163,8 +166,8 @@ shifts = 2
 
 # Change type of day here, Weekdays or Saturday
 
-#day_type = 'Weekdays'
-day_type = 'Saturday'
+day_type = 'Weekdays'
+#day_type = 'Saturday'
 
 # This code picks a node a truck could drive to to start, and then searches for nodes around it. Only go to it if it
 # has demand
@@ -252,8 +255,8 @@ for routes in route_times:
     random_dem = rng.normal(0, 0.5)
     print(random_dem)
     route_times[routes] += random_dem
-
 '''
+
 
 under_price = 250
 over_price = 325
