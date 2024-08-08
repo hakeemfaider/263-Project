@@ -8,6 +8,8 @@ import matplotlib.pyplot as plt
 import matplotlib
 from random import randint
 from datetime import datetime
+import seaborn as sns
+import copy
 
 
 def create_data():
@@ -140,6 +142,32 @@ def calc_times():
     return path_times
 
 
+def calc_updated_times(missed_stores, loop_routes):
+    global all_stores
+    global map_data
+    global final_data
+    global day_type
+    path_times = {}
+    for i in range(len(loop_routes)):
+        current_path_time_sum = 0
+        for missed in missed_stores:
+            if missed in loop_routes[i]:
+                loop_routes[i].remove(missed)
+        for j in range(len(loop_routes[i]) - 1):
+            index_one = all_stores.index(final_routes[i][j])
+            index_two = all_stores.index(final_routes[i][j + 1]) + 1
+            time_taken = map_data.iloc[index_one].iloc[index_two]
+            rng_time = np.random.normal(time_taken, time_taken/4)
+            current_path_time_sum += rng_time
+        for store in loop_routes[i]:
+            current_path_time_sum += final_data[day_type][store] * 60 * 10
+        # All times are in hours and cost even if you need 5 mins into next hour, given in seconds currently
+        current_path_time_sum = ceil(current_path_time_sum/3600)
+        route_name = str(i)
+        path_times.update({route_name: current_path_time_sum})
+    return path_times
+
+
 map_data = pd.read_csv('WoolworthsDurations.csv')
 data = pd.read_csv('WoolworthsDemand2024.csv')
 store_data = pd.read_csv('WoolworthsLocations.csv')
@@ -157,7 +185,7 @@ final_data = final_data.transpose()
 # Max_time : the max time a truck is allowed to take between those shops
 
 min_nodes = 1
-max_time = 10000
+max_time = 1000
 used_nodes = []
 max_pallets = 20
 total_possible_paths = []
@@ -238,32 +266,20 @@ for i in range(len(total_possible_paths)):
     nodes.update({list(route_times.keys())[i]: total_possible_paths[i]})
 
 too_long_routes = []
+max_hours = 4
 
 for routes in route_times:
-    if route_times[routes] > 4:
+    if route_times[routes] > max_hours:
         too_long_routes.append(routes)
 for i in too_long_routes:
     route_times.pop(i)
     nodes.pop(i)
 
-
-'''
-Section can be activated to test randomness in routes due to traffic (its normally distributed? May change)
-
-for routes in route_times:
-    rng = np.random.default_rng()
-    random_dem = rng.normal(0, 0.5)
-    print(random_dem)
-    route_times[routes] += random_dem
-'''
-
-
 under_price = 250
 over_price = 325
-max_hours = 4
 route_times_check = {}
 for i in route_times:
-    if route_times[i] > 4:
+    if route_times[i] > max_hours:
         route_times_check.update({i: 1})
     else:
         route_times_check.update({i: 0})
@@ -305,6 +321,7 @@ print("Total Cost = $", value(prob.objective))
 
 route_count = 0
 # Each of the variables is printed with its resolved optimum value
+final_routes = []
 check_location_array = []
 for v in prob.variables():
     if v.varValue == 1:
@@ -315,12 +332,13 @@ for v in prob.variables():
         print(f"Hours needed is {route_times[index]}")
         nodes[index].insert(0, "Distribution Centre Auckland")
         nodes[index].append("Distribution Centre Auckland")
+        final_routes.append(nodes[index])
         print(f"Route is {nodes[index]}")
         for i in nodes[index]:
             demand_req += final_data[day_type][i]
         print(f"Demand Required was {demand_req} pallets")
-        nodes[index].append("Distribution Centre Auckland")
-        nodes[index].insert(0, "Distribution Centre Auckland")
+        '''
+        uncomment to plot map of straight routes
         x_values = []
         y_values = []
         for visits in nodes[index]:
@@ -331,9 +349,10 @@ for v in prob.variables():
         plt.plot(x_values, y_values)
         for j in range(len(x_values)):
             plt.scatter(x_values[j], y_values[j], color='black')
+        '''
         for locations in nodes[index]:
             check_location_array.append(locations)
-plt.show()
+# plt.show() uncomment to plot straight routes
 
 for locations in check_location_array:
     if locations not in all_stores:
@@ -341,6 +360,114 @@ for locations in check_location_array:
         print(locations)
 
 print(f"We need {route_count} routes for this solution")
+
+
+# ---------------------------------------------------------------------------
+runs = 100
+mainfreight_count = 0
+run = 0
+data_points = []
+while run < runs:
+    temp_finished_routes = copy.deepcopy(final_routes)
+    random_data = copy.deepcopy(final_data)
+    for shop in list(random_data.index):
+        random_demand = np.random.normal(final_data[day_type][shop], final_data[day_type][shop]/4)
+        random_data[day_type][shop] = round(random_demand)
+    '''
+    Section can be activated to test randomness in routes due to traffic (its normally distributed? May change)
+    '''
+    cost = 0
+    unvisited_stores = []
+    for routes in temp_finished_routes:
+        demand_req = 0
+        demand_og = 0
+        for store in routes:
+            demand_req += random_data[day_type][store]
+            demand_og += final_data[day_type][store]
+            if demand_req > 20 and store != "Distribution Centre Auckland":
+                unvisited_stores.append(store)
+    for i in range(len(final_routes)):
+        if "Distribution Centre Auckland" not in temp_finished_routes[i]:
+            final_routes[i].append("Distribution Centre Auckland")
+            final_routes[i].insert(0, "Distribution Centre Auckland")
+    new_route_times = calc_updated_times(unvisited_stores, temp_finished_routes)
+
+    '''
+    Truck visits store, if it has enough pallets, and is under the 4 hour barrier, then go to that store
+    '''
+    additional_route_times = {}
+    current_time = 0
+    current_pallets = 0
+    additional_routes = []
+    now_visited_stores = []
+    index_one = all_stores.index('Distribution Centre Auckland')
+    for store in unvisited_stores:
+        current_route = []
+        if store not in now_visited_stores:
+            current_route.append(store)
+            now_visited_stores.append(store)
+            current_pallets += random_data[day_type][store]
+            index_two = all_stores.index(store)
+            random_time = np.random.poisson(map_data.iloc[index_one].iloc[index_two])
+            current_time += random_time + (60 * 10 + current_pallets)
+            for extra_store in unvisited_stores:
+                index_three = all_stores.index(extra_store)
+                random_time_two = np.random.poisson(map_data.iloc[index_two].iloc[index_three])
+                random_time_three = np.random.poisson(map_data.iloc[index_three].iloc[index_one])
+                would_be_time = (current_time + random_time_two + 60 * 10 *
+                                 random_data[day_type][extra_store] + random_time_three)
+                if (current_pallets + random_data[day_type][extra_store]) <= 20 and would_be_time <= 60 * 60 * 4:
+                    current_route.append(extra_store)
+                    now_visited_stores.append(extra_store)
+                    additional_routes.append(current_route)
+                    additional_route_times.update({current_route[0]: ceil(would_be_time/ 3600)})
+                    break
+                elif extra_store == unvisited_stores[-1]:
+                    additional_routes.append(current_route)
+                    additional_route_times.update({current_route[0]: ceil(current_time / 3600)})
+    additional_trucks = 2
+    count = 0
+    mainfreight_cost = 2300
+    under_price = 250
+    over_price = 325
+    route_times_check = {}
+    for i in new_route_times:
+        if new_route_times[i] > max_hours:
+            route_times_check.update({i: 1})
+        else:
+            route_times_check.update({i: 0})
+    for routes in additional_route_times:
+        count += 1
+        if count <= additional_trucks:
+            if additional_route_times[routes] > 4:
+                cost += 4 * under_price + (additional_route_times[routes] - 4) * over_price
+            else:
+                cost += additional_route_times[routes] * under_price
+        else:
+            cost += ceil(additional_route_times[routes] / 4) * mainfreight_cost
+    if count > 2:
+        mainfreight_count += (count - 2)
+    for routes in new_route_times:
+        cost += ((under_price * (new_route_times[routes] - (new_route_times[routes] - max_hours) *
+                                 route_times_check[routes]) + over_price * (new_route_times[routes] - max_hours) *
+                  route_times_check[routes]))
+    data_points.append(cost)
+    run += 1
+
+print(f'After {runs} runs, we required {mainfreight_count} Mainfreight trucks')
+plt.hist(data_points, bins = 50)
+plt.show()
+
+
+
+
+
+
+
+
+
+
+
 
 
 
