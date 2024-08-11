@@ -157,7 +157,9 @@ def calc_updated_times(missed_stores, loop_routes):
             index_one = all_stores.index(final_routes[i][j])
             index_two = all_stores.index(final_routes[i][j + 1]) + 1
             time_taken = map_data.iloc[index_one].iloc[index_two]
-            rng_time = np.random.normal(time_taken, time_taken/4)
+            rng_time = np.random.normal(time_taken, time_taken/2)
+            while rng_time <= 0:
+                rng_time = np.random.normal(time_taken, time_taken/2)
             current_path_time_sum += rng_time
         for store in loop_routes[i]:
             current_path_time_sum += final_data[day_type][store] * 60 * 10
@@ -194,8 +196,8 @@ shifts = 2
 
 # Change type of day here, Weekdays or Saturday
 
-day_type = 'Weekdays'
-#day_type = 'Saturday'
+# day_type = 'Weekdays'
+day_type = 'Saturday'
 
 # This code picks a node a truck could drive to to start, and then searches for nodes around it. Only go to it if it
 # has demand
@@ -363,16 +365,20 @@ print(f"We need {route_count} routes for this solution")
 
 
 # ---------------------------------------------------------------------------
-runs = 100
+runs = 500
 mainfreight_count = 0
+max_mainfreight = 0
+max_cost = 0
 run = 0
 data_points = []
 while run < runs:
     temp_finished_routes = copy.deepcopy(final_routes)
     random_data = copy.deepcopy(final_data)
     for shop in list(random_data.index):
-        random_demand = np.random.normal(final_data[day_type][shop], final_data[day_type][shop]/4)
-        random_data[day_type][shop] = round(random_demand)
+        random_demand = np.random.normal(final_data[day_type][shop], final_data[day_type][shop]/2)
+        while random_demand < 0 or random_demand > 20:
+            random_demand = np.random.normal(final_data[day_type][shop], final_data[day_type][shop] / 2)
+        random_data.loc[shop, day_type] = round(random_demand)
     '''
     Section can be activated to test randomness in routes due to traffic (its normally distributed? May change)
     '''
@@ -408,23 +414,35 @@ while run < runs:
             now_visited_stores.append(store)
             current_pallets += random_data[day_type][store]
             index_two = all_stores.index(store)
-            random_time = np.random.poisson(map_data.iloc[index_one].iloc[index_two])
+            random_time = np.random.normal(map_data.iloc[index_one].iloc[index_two],
+                                           map_data.iloc[index_one].iloc[index_two]/2)
+            while random_time < 0:
+                random_time = np.random.normal(map_data.iloc[index_one].iloc[index_two],
+                                               map_data.iloc[index_one].iloc[index_two] / 2)
             current_time += random_time + (60 * 10 + current_pallets)
             for extra_store in unvisited_stores:
                 index_three = all_stores.index(extra_store)
-                random_time_two = np.random.poisson(map_data.iloc[index_two].iloc[index_three])
-                random_time_three = np.random.poisson(map_data.iloc[index_three].iloc[index_one])
+                random_time_two = np.random.normal(map_data.iloc[index_two].iloc[index_three],
+                                                   map_data.iloc[index_two].iloc[index_three]/2)
+                while random_time_two < 0:
+                    random_time_two = np.random.normal(map_data.iloc[index_two].iloc[index_three],
+                                                       map_data.iloc[index_two].iloc[index_three] / 2)
+                random_time_three = np.random.normal(map_data.iloc[index_three].iloc[index_one],
+                                                     map_data.iloc[index_three].iloc[index_one]/2)
+                while random_time_three < 0:
+                    random_time_three = np.random.normal(map_data.iloc[index_three].iloc[index_one],
+                                                         map_data.iloc[index_three].iloc[index_one] / 2)
                 would_be_time = (current_time + random_time_two + 60 * 10 *
                                  random_data[day_type][extra_store] + random_time_three)
                 if (current_pallets + random_data[day_type][extra_store]) <= 20 and would_be_time <= 60 * 60 * 4:
                     current_route.append(extra_store)
                     now_visited_stores.append(extra_store)
                     additional_routes.append(current_route)
-                    additional_route_times.update({current_route[0]: ceil(would_be_time/ 3600)})
+                    additional_route_times.update({current_route[0]: round(would_be_time/ 3600)})
                     break
                 elif extra_store == unvisited_stores[-1]:
                     additional_routes.append(current_route)
-                    additional_route_times.update({current_route[0]: ceil(current_time / 3600)})
+                    additional_route_times.update({current_route[0]: round(current_time / 3600)})
     additional_trucks = 2
     count = 0
     mainfreight_cost = 2300
@@ -444,19 +462,31 @@ while run < runs:
             else:
                 cost += additional_route_times[routes] * under_price
         else:
-            cost += ceil(additional_route_times[routes] / 4) * mainfreight_cost
+            cost += round(additional_route_times[routes] / 4) * mainfreight_cost
     if count > 2:
         mainfreight_count += (count - 2)
+        if (count - 2) > max_mainfreight:
+            max_mainfreight = count - 2
     for routes in new_route_times:
         cost += ((under_price * (new_route_times[routes] - (new_route_times[routes] - max_hours) *
                                  route_times_check[routes]) + over_price * (new_route_times[routes] - max_hours) *
                   route_times_check[routes]))
     data_points.append(cost)
+    if cost > max_cost:
+        max_cost = cost
     run += 1
 
-print(f'After {runs} runs, we required {mainfreight_count} Mainfreight trucks')
+print(f'After {runs} runs, we required {mainfreight_count} Mainfreight trucks, an average of '
+      f'{mainfreight_count/runs} per run')
+print(f'The maximum number of Mainfreight trucks required during one shift was {max_mainfreight}')
 plt.hist(data_points, bins = 50)
 plt.show()
+average_cost = 0
+for costs in data_points:
+    average_cost += (costs / runs)
+print(f'The average cost was ${round(average_cost)} compared to our original cost of ${value(prob.objective)}')
+print(f'The max cost was ${round(max_cost)}')
+
 
 
 
