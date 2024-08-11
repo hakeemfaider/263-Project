@@ -196,8 +196,8 @@ shifts = 2
 
 # Change type of day here, Weekdays or Saturday
 
-# day_type = 'Weekdays'
-day_type = 'Saturday'
+day_type = 'Weekdays'
+# day_type = 'Saturday'
 
 # This code picks a node a truck could drive to to start, and then searches for nodes around it. Only go to it if it
 # has demand
@@ -365,7 +365,7 @@ print(f"We need {route_count} routes for this solution")
 
 
 # ---------------------------------------------------------------------------
-runs = 500
+runs = 1000
 mainfreight_count = 0
 max_mainfreight = 0
 max_cost = 0
@@ -443,7 +443,12 @@ while run < runs:
                 elif extra_store == unvisited_stores[-1]:
                     additional_routes.append(current_route)
                     additional_route_times.update({current_route[0]: round(current_time / 3600)})
+    '''
+    Hard code additional trucks after our original routes were set out. Weekdays we have 2 trucks left, Saturday is 13
+    '''
     additional_trucks = 2
+    if day_type == 'Saturday':
+        additional_trucks = 13
     count = 0
     mainfreight_cost = 2300
     under_price = 250
@@ -463,10 +468,10 @@ while run < runs:
                 cost += additional_route_times[routes] * under_price
         else:
             cost += round(additional_route_times[routes] / 4) * mainfreight_cost
-    if count > 2:
-        mainfreight_count += (count - 2)
-        if (count - 2) > max_mainfreight:
-            max_mainfreight = count - 2
+    if count > additional_trucks:
+        mainfreight_count += (count - additional_trucks)
+        if (count - additional_trucks) > max_mainfreight:
+            max_mainfreight = count - additional_trucks
     for routes in new_route_times:
         cost += ((under_price * (new_route_times[routes] - (new_route_times[routes] - max_hours) *
                                  route_times_check[routes]) + over_price * (new_route_times[routes] - max_hours) *
