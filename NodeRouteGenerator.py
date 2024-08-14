@@ -10,6 +10,7 @@ from random import randint
 from datetime import datetime
 import seaborn as sns
 import copy
+import statsmodels.stats.api as sms
 
 
 def create_data():
@@ -365,7 +366,7 @@ print(f"We need {route_count} routes for this solution")
 
 
 # ---------------------------------------------------------------------------
-runs = 1000
+runs = 100
 mainfreight_count = 0
 max_mainfreight = 0
 max_cost = 0
@@ -491,6 +492,19 @@ for costs in data_points:
     average_cost += (costs / runs)
 print(f'The average cost was ${round(average_cost)} compared to our original cost of ${value(prob.objective)}')
 print(f'The max cost was ${round(max_cost)}')
+clt_normal = []
+for i in range(1000):
+    temp_random = []
+    for j in range(int(round(len(data_points) / 2))):
+        random_temp = int(random.randint(0, len(data_points) - 1))
+        temp_random.append(data_points[random_temp])
+    clt_normal.append(np.mean(temp_random))
+print("The 95% confidence interval for the mean of our outputs is: ")
+print(sms.DescrStatsW(clt_normal).tconfint_mean())
+
+
+
+
 
 
 
