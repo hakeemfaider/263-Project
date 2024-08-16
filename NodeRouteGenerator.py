@@ -159,7 +159,7 @@ def calc_updated_times(missed_stores, loop_routes):
             index_two = all_stores.index(final_routes[i][j + 1]) + 1
             time_taken = map_data.iloc[index_one].iloc[index_two]
             rng_time = np.random.normal(time_taken, time_taken/2)
-            while rng_time <= 0:
+            while rng_time < time_taken * 0.8 or rng_time > time_taken * 2:
                 rng_time = np.random.normal(time_taken, time_taken/2)
             current_path_time_sum += rng_time
         for store in loop_routes[i]:
@@ -173,7 +173,7 @@ def calc_updated_times(missed_stores, loop_routes):
 
 map_data = pd.read_csv('WoolworthsDurations.csv')
 data = pd.read_csv('WoolworthsDemand2024.csv')
-store_data = pd.read_csv('WoolworthsLocations.csv')
+store_data = pd.read_csv('WoolworthsLocations.csv', index_col="Store")
 all_stores = []
 for i in range(len(data)):
     all_stores.append(data.iloc[i].iloc[0])
@@ -366,7 +366,7 @@ print(f"We need {route_count} routes for this solution")
 
 
 # ---------------------------------------------------------------------------
-runs = 100
+runs = 1000
 mainfreight_count = 0
 max_mainfreight = 0
 max_cost = 0
@@ -376,10 +376,29 @@ while run < runs:
     temp_finished_routes = copy.deepcopy(final_routes)
     random_data = copy.deepcopy(final_data)
     for shop in list(random_data.index):
-        random_demand = np.random.normal(final_data[day_type][shop], final_data[day_type][shop]/2)
-        while random_demand < 0 or random_demand > 20:
-            random_demand = np.random.normal(final_data[day_type][shop], final_data[day_type][shop] / 2)
-        random_data.loc[shop, day_type] = round(random_demand)
+        if store_data.loc[shop]["Type"] == "FreshChoice" and day_type == "Weekdays":
+            random_demand = random.randint(-1, 9)
+            while random_demand < 1 or random_demand > 9:
+                random_demand = random.randint(-1, 9)
+        elif store_data.loc[shop]["Type"] == "Metro" and day_type == "Weekdays":
+            random_demand = random.randint(0, 8)
+            while random_demand < 1 or random_demand > 8:
+                random_demand = random.randint(0, 8)
+        elif store_data.loc[shop]["Type"] == "SuperValue" and day_type == "Weekdays":
+            random_demand = random.randint(0, 6)
+            while random_demand < 1 or random_demand > 6:
+                random_demand = random.randint(0, 6)
+        elif store_data.loc[shop]["Type"] == "Woolworths" and day_type == "Weekdays":
+            random_demand = random.randint(1, 15)
+            while random_demand < 3 or random_demand > 15:
+                random_demand = random.randint(1, 15)
+        elif store_data.loc[shop]["Type"] == "Woolworths" and day_type == "Saturday":
+            random_demand = random.randint(1, 9)
+            while random_demand < 2 or random_demand > 9:
+                random_demand = random.randint(1, 9)
+        else:
+            random_demand = 0
+        random_data.loc[shop, day_type] = random_demand
     '''
     Section can be activated to test randomness in routes due to traffic (its normally distributed? May change)
     '''
@@ -417,7 +436,8 @@ while run < runs:
             index_two = all_stores.index(store)
             random_time = np.random.normal(map_data.iloc[index_one].iloc[index_two],
                                            map_data.iloc[index_one].iloc[index_two]/2)
-            while random_time < 0:
+            while (random_time < map_data.iloc[index_one].iloc[index_two] * 0.8 or random_time >
+                   map_data.iloc[index_one].iloc[index_two] * 2):
                 random_time = np.random.normal(map_data.iloc[index_one].iloc[index_two],
                                                map_data.iloc[index_one].iloc[index_two] / 2)
             current_time += random_time + (60 * 10 + current_pallets)
@@ -425,12 +445,14 @@ while run < runs:
                 index_three = all_stores.index(extra_store)
                 random_time_two = np.random.normal(map_data.iloc[index_two].iloc[index_three],
                                                    map_data.iloc[index_two].iloc[index_three]/2)
-                while random_time_two < 0:
+                while (random_time_two < map_data.iloc[index_two].iloc[index_three] * 0.8 or random_time_two >
+                       map_data.iloc[index_two].iloc[index_three] * 2):
                     random_time_two = np.random.normal(map_data.iloc[index_two].iloc[index_three],
                                                        map_data.iloc[index_two].iloc[index_three] / 2)
                 random_time_three = np.random.normal(map_data.iloc[index_three].iloc[index_one],
                                                      map_data.iloc[index_three].iloc[index_one]/2)
-                while random_time_three < 0:
+                while (random_time_three < map_data.iloc[index_three].iloc[index_one] * 0.8 or random_time_three >
+                       map_data.iloc[index_three].iloc[index_one] * 2):
                     random_time_three = np.random.normal(map_data.iloc[index_three].iloc[index_one],
                                                          map_data.iloc[index_three].iloc[index_one] / 2)
                 would_be_time = (current_time + random_time_two + 60 * 10 *
@@ -439,11 +461,11 @@ while run < runs:
                     current_route.append(extra_store)
                     now_visited_stores.append(extra_store)
                     additional_routes.append(current_route)
-                    additional_route_times.update({current_route[0]: round(would_be_time/ 3600)})
+                    additional_route_times.update({current_route[0]: ceil(would_be_time/ 3600)})
                     break
                 elif extra_store == unvisited_stores[-1]:
                     additional_routes.append(current_route)
-                    additional_route_times.update({current_route[0]: round(current_time / 3600)})
+                    additional_route_times.update({current_route[0]: ceil(current_time / 3600)})
     '''
     Hard code additional trucks after our original routes were set out. Weekdays we have 2 trucks left, Saturday is 13
     '''
@@ -468,7 +490,7 @@ while run < runs:
             else:
                 cost += additional_route_times[routes] * under_price
         else:
-            cost += round(additional_route_times[routes] / 4) * mainfreight_cost
+            cost += ceil(additional_route_times[routes] / 4) * mainfreight_cost
     if count > additional_trucks:
         mainfreight_count += (count - additional_trucks)
         if (count - additional_trucks) > max_mainfreight:
