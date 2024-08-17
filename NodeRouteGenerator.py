@@ -377,25 +377,15 @@ while run < runs:
     random_data = copy.deepcopy(final_data)
     for shop in list(random_data.index):
         if store_data.loc[shop]["Type"] == "FreshChoice" and day_type == "Weekdays":
-            random_demand = random.randint(-1, 9)
-            while random_demand < 1 or random_demand > 9:
-                random_demand = random.randint(-1, 9)
-        elif store_data.loc[shop]["Type"] == "Metro" and day_type == "Weekdays":
-            random_demand = random.randint(0, 8)
-            while random_demand < 1 or random_demand > 8:
-                random_demand = random.randint(0, 8)
-        elif store_data.loc[shop]["Type"] == "SuperValue" and day_type == "Weekdays":
-            random_demand = random.randint(0, 6)
-            while random_demand < 1 or random_demand > 6:
-                random_demand = random.randint(0, 6)
-        elif store_data.loc[shop]["Type"] == "Woolworths" and day_type == "Weekdays":
-            random_demand = random.randint(1, 15)
-            while random_demand < 3 or random_demand > 15:
-                random_demand = random.randint(1, 15)
-        elif store_data.loc[shop]["Type"] == "Woolworths" and day_type == "Saturday":
             random_demand = random.randint(1, 9)
-            while random_demand < 2 or random_demand > 9:
-                random_demand = random.randint(1, 9)
+        elif store_data.loc[shop]["Type"] == "Metro" and day_type == "Weekdays":
+            random_demand = random.randint(1, 8)
+        elif store_data.loc[shop]["Type"] == "SuperValue" and day_type == "Weekdays":
+            random_demand = random.randint(1, 6)
+        elif store_data.loc[shop]["Type"] == "Woolworths" and day_type == "Weekdays":
+            random_demand = random.randint(3, 15)
+        elif store_data.loc[shop]["Type"] == "Woolworths" and day_type == "Saturday":
+            random_demand = random.randint(2, 9)
         else:
             random_demand = 0
         random_data.loc[shop, day_type] = random_demand
